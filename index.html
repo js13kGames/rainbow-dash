@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Rainbow Dash XR - js13k 2026</title>
+  <meta name="description" content="Rainbow Dash XR — Catch unicorns, dodge dark bombs in this fast-paced WebXR lane runner.">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none}
+    body,html{width:100%;height:100%;overflow:hidden;background:#020010;font-family:system-ui,-apple-system,sans-serif;color:#fff}
+    #game-container{position:absolute;inset:0}
+
+    /* Vignette flash */
+    #vignette{position:absolute;inset:0;pointer-events:none;z-index:5;opacity:0;transition:opacity .4s ease-out}
+
+    /* HUD */
+    #hud{position:absolute;top:0;left:0;width:100%;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:6px;pointer-events:none;z-index:10;flex-wrap:wrap}
+
+    .hud-card{background:linear-gradient(135deg,rgba(20,8,45,.9),rgba(10,4,28,.82));backdrop-filter:blur(12px);border:1px solid rgba(255,102,204,.3);padding:6px 12px;border-radius:12px;box-shadow:0 2px 16px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);pointer-events:auto;position:relative;overflow:hidden}
+    .hud-card::after{content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);transition:left .5s}
+    .hud-card:hover::after{left:160%}
+    .hud-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:rgba(180,155,220,.8)}
+    .hud-val{font-size:20px;font-weight:900;color:#ffeb3b;text-shadow:0 0 10px rgba(255,235,59,.4);line-height:1.1}
+    #lives-val{color:#ff3366;text-shadow:0 0 10px rgba(255,51,102,.5);font-size:16px}
+
+    @keyframes lifeLost{0%{transform:scale(1.5);filter:brightness(2.5)}50%{transform:scale(.88)}100%{transform:scale(1);filter:brightness(1)}}
+    #lives-val.life-lost{animation:lifeLost .5s ease}
+    @keyframes comboFlash{0%{transform:scale(1.55);color:#00ffff;text-shadow:0 0 28px #00ffff}70%{transform:scale(1.1)}100%{transform:scale(1);color:#ffeb3b}}
+    #combo-val.combo-flash{animation:comboFlash .6s ease}
+
+    /* Combo bar */
+    #combo-bar{position:absolute;bottom:68px;left:50%;transform:translateX(-50%);width:min(260px,60vw);height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;z-index:10;pointer-events:none}
+    #combo-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#ff66cc,#9933ff);border-radius:3px;transition:width .25s cubic-bezier(.34,1.56,.64,1)}
+
+    /* Score popup */
+    #score-popup{position:absolute;top:50%;left:50%;transform:translateX(-50%) translateY(-30px) scale(1);font-size:clamp(20px,4vw,30px);font-weight:900;color:#ffeb3b;text-shadow:0 2px 18px rgba(255,235,59,.7),0 0 36px rgba(255,102,204,.35);pointer-events:none;z-index:50;opacity:0;white-space:nowrap}
+    @keyframes popFly{0%{opacity:1;transform:translateX(-50%) translateY(-30px) scale(1.15)}40%{opacity:1;transform:translateX(-50%) translateY(-75px) scale(1)}100%{opacity:0;transform:translateX(-50%) translateY(-130px) scale(.85)}}
+    #score-popup.popup-hide{animation:popFly .85s cubic-bezier(.22,.61,.36,1) forwards}
+
+    /* Buttons */
+    .btn{background:linear-gradient(135deg,#ff66cc,#9933ff 60%,#6600cc);border:none;color:#fff;padding:13px 28px;font-size:17px;font-weight:900;font-family:inherit;border-radius:50px;cursor:pointer;box-shadow:0 0 18px rgba(255,102,204,.5),0 4px 24px rgba(0,0,0,.4);transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .2s ease;pointer-events:auto;position:relative;overflow:hidden}
+    .btn::after{content:'';position:absolute;top:0;left:-100%;width:55%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);transform:skewX(-18deg);transition:left .5s}
+    .btn:hover{transform:translateY(-2px) scale(1.03);box-shadow:0 0 32px rgba(255,102,204,.7),0 8px 36px rgba(0,0,0,.4)}
+    .btn:hover::after{left:155%}
+    .btn:active{transform:scale(.94);box-shadow:0 0 10px rgba(255,102,204,.35)}
+    .btn-sm{padding:7px 16px;font-size:12px;font-weight:700;border-radius:28px}
+
+    /* Lane controls */
+    #lane-controls{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:20;pointer-events:auto}
+    .lane-btn{background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.04));backdrop-filter:blur(10px);border:2px solid rgba(255,255,255,.28);color:#fff;padding:12px 20px;border-radius:16px;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer;transition:background .15s,border-color .15s,transform .12s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;position:relative;overflow:hidden}
+    .lane-btn:hover{background:rgba(255,102,204,.22);border-color:rgba(255,102,204,.6);transform:translateY(-2px);box-shadow:0 4px 18px rgba(255,102,204,.28)}
+    .lane-btn:active{background:rgba(255,102,204,.5);transform:scale(.92) translateY(2px);border-color:#ff66cc}
+
+    /* Ripple */
+    .ripple{position:absolute;border-radius:50%;transform:scale(0);animation:rippleA .45s linear;background:rgba(255,255,255,.32);pointer-events:none}
+    @keyframes rippleA{to{transform:scale(4);opacity:0}}
+
+    /* Overlays */
+    @keyframes ovEnter{from{opacity:0}to{opacity:1}}
+    .overlay{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(70,15,110,.5) 0%,rgba(10,5,27,.92) 70%);backdrop-filter:blur(16px);display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;z-index:100;padding:20px;animation:ovEnter .5s ease both}
+    .overlay-enter{animation:ovEnter .5s ease both}
+    .hidden{display:none!important}
+
+    h1{font-size:clamp(28px,5.5vw,52px);font-weight:900;letter-spacing:-1px;background:linear-gradient(135deg,#ff66cc,#ffeb3b 45%,#00ffff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;filter:drop-shadow(0 0 22px rgba(255,102,204,.35));animation:titleGlow 4s ease-in-out infinite}
+    @keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 18px rgba(255,102,204,.3))}50%{filter:drop-shadow(0 0 38px rgba(255,102,204,.65))}}
+
+    p.subtitle{font-size:15px;color:rgba(200,185,238,.85);max-width:440px;margin-bottom:18px;line-height:1.5}
+
+    .guide-box{background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px 22px;margin-bottom:22px;font-size:13px;text-align:left;line-height:1.8;max-width:460px;backdrop-filter:blur(6px);animation:guideSlide .65s cubic-bezier(.22,1,.36,1) .15s both}
+    @keyframes guideSlide{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+    .btn-wrap{animation:btnPop .55s cubic-bezier(.34,1.56,.64,1) .35s both}
+    @keyframes btnPop{from{opacity:0;transform:scale(.65)}to{opacity:1;transform:scale(1)}}
+
+    #vr-button{position:relative!important;left:auto!important;bottom:auto!important;background:linear-gradient(135deg,#00ffff,#0088ff)!important;color:#000!important;font-weight:800!important;border-radius:30px!important;padding:7px 14px!important;border:none!important;cursor:pointer!important}
+
+    /* Mobile */
+    @media(max-width:600px){
+      #hud{display:grid;grid-template-columns:1fr 1fr;padding:6px 8px;gap:5px}
+      .hud-card{padding:5px 10px;border-radius:10px}
+      .hud-title{font-size:8px;letter-spacing:.8px}
+      .hud-val{font-size:16px}
+      #lives-val{font-size:13px}
+      #mute-btn{grid-column:1/-1;justify-self:center;padding:5px 14px;font-size:11px}
+      #lane-controls{width:calc(100% - 14px);bottom:8px;gap:5px}
+      .lane-btn{flex:1;min-width:0;padding:11px 4px;border-radius:12px;font-size:11px}
+      #combo-bar{bottom:62px;width:calc(100% - 32px)}
+      h1{font-size:clamp(24px,7vw,38px)}
+      .guide-box{font-size:12px;padding:12px 16px}
+      .btn{padding:11px 24px;font-size:15px}
+    }
+    @media(max-width:360px){
+      .hud-val{font-size:13px}
+      .lane-btn{padding:10px 2px;font-size:10px}
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="vignette"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-card"><div class="hud-title">Score</div><div class="hud-val" id="score-val">0</div></div>
+    <div class="hud-card"><div class="hud-title">Combo</div><div class="hud-val" id="combo-val">1x</div></div>
+    <div class="hud-card"><div class="hud-title">Lives</div><div class="hud-val" id="lives-val">❤️❤️❤️</div></div>
+    <div class="hud-card"><div class="hud-title">Best</div><div class="hud-val" id="high-val">0</div></div>
+    <button class="btn btn-sm" id="mute-btn">🔊 Sound</button>
+  </div>
+
+  <!-- Score popup -->
+  <div id="score-popup">+100</div>
+
+  <!-- Combo bar -->
+  <div id="combo-bar"><div id="combo-bar-fill"></div></div>
+
+  <!-- Lane buttons -->
+  <div id="lane-controls">
+    <button class="lane-btn" id="btn-lane-left">⬅ LEFT</button>
+    <button class="lane-btn" id="btn-lane-center">■ MID</button>
+    <button class="lane-btn" id="btn-lane-right">RIGHT ➡</button>
+  </div>
+
+  <!-- Start overlay -->
+  <div class="overlay" id="overlay-menu">
+    <h1>RAINBOW DASH XR</h1>
+    <p class="subtitle">Catch unicorns, dodge dark bombs — race into the neon cosmos!</p>
+    <div class="guide-box">
+      🦄 <b>UNICORN</b> (+100 pts) → Stand in its lane!<br>
+      ⭐ <b>GOLDEN PEGASUS</b> (+300 pts) → Stand in its lane!<br>
+      💣 <b>DARK BOMB</b> → <b>DODGE IT!</b> Move away!<br>
+      🎮 A/D · Arrows · Swipe · Buttons · WebXR VR
+    </div>
+    <div class="btn-wrap"><button class="btn" id="start-btn">✨ PLAY NOW ✨</button></div>
+  </div>
+
+  <!-- Game over overlay -->
+  <div class="overlay hidden" id="overlay-gameover">
+    <h1>GAME OVER</h1>
+    <p class="subtitle">The cosmos reclaims its stars…</p>
+    <div class="guide-box">
+      🏆 <b>Final Score:</b> <span id="final-score">0</span><br>
+      🔥 <b>Best Combo:</b> <span id="final-combo">0</span>x
+    </div>
+    <div class="btn-wrap"><button class="btn" id="restart-btn">🔄 PLAY AGAIN</button></div>
+  </div>
+
+  <script>
+    document.querySelectorAll('button').forEach(b => b.addEventListener('click', function(e) {
+      const r = document.createElement('span'), rect = this.getBoundingClientRect();
+      const s = Math.max(rect.width, rect.height);
+      r.className = 'ripple';
+      r.style.cssText = `width:${s}px;height:${s}px;left:${e.clientX-rect.left-s/2}px;top:${e.clientY-rect.top-s/2}px`;
+      this.appendChild(r); setTimeout(() => r.remove(), 450);
+    }));
+  </script>
+
+  <script type="module">
+    import { initGame } from './src/main.js';
+    initGame();
+  </script>
+</body>
+</html>

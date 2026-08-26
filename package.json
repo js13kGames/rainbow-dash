@@ -1,0 +1,25 @@
+{
+  "name": "rainbow-dash-xr",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "WebXR Unicorn Catching Game for js13kGames 2026",
+  "scripts": {
+    "dev": "vite",
+    "build": "node build.js"
+  },
+  "keywords": [
+    "webxr",
+    "threejs",
+    "js13k",
+    "unicorns",
+    "rainbow"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "bestzip": "^2.2.1",
+    "html-minifier-terser": "^7.2.0",
+    "terser": "^5.40.0",
+    "vite": "^6.2.1"
+  }
+}
